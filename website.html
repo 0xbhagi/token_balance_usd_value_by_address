@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Get all ERC20 Tokens balance and USD Value by an address.</title>
+    
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .container { max-width: max-content; margin: 0 auto; padding: 20px; }
+        .search-bar { display: flex; margin-bottom: 20px; }
+        .search-bar input { flex: 1; padding: 10px; font-size: 16px; }
+        .search-bar button { padding: 10px 20px; font-size: 16px; }
+        .filter-bar { display: flex; align-items: center; margin-bottom: 10px; }
+        .error { color: red; margin-top: 10px; }
+
+        /* Set a fixed height for table container and enable overflow */
+        .table-container { max-height: 650px; overflow-y: auto; border: 1px solid #ddd; }
+
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border: 1px solid #ddd; }
+        
+        /* Make header fixed */
+        thead th {
+            position: sticky;
+            top: 0;
+            background-color: #f4f4f4;
+            z-index: 1;
+        }
+
+        th { cursor: pointer; }
+        .settings { margin-bottom: 20px; }
+
+        /* Progress bar styles */
+        .progress {
+            width: 100%;
+            background-color: #f3f3f3;
+            border-radius: 5px;
+            height: 20px;
+            margin-bottom: 10px;
+            display: none; /* Hidden by default */
+        }
+        .progress-bar {
+            height: 100%;
+            width: 0;
+            background-color: #4caf50;
+            border-radius: 5px;
+            transition: width 0.4s;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Get all ERC20 Tokens balance and USD Value by an address.</h1>
+    
+    <div class="settings">
+        <label for="apiKey">Moralis API Key:</label>
+        <input type="text" id="apiKey" placeholder="Enter your Moralis API Key" />
+    </div>
+    
+    <div class="search-bar">
+        <input type="text" id="address" placeholder="Enter wallet address">
+        <button onclick="fetchBalances()">Get Balances</button>
+    </div>
+
+    <div class="progress">
+        <div class="progress-bar" id="progressBar"></div>
+    </div>
+    
+    <div id="errorDisplay" class="error"></div> <!-- Error display section -->
+    
+    <div id="netWorthDisplay" style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">
+        Total Net Worth: $0
+    </div>
+    
+    <div class="table-container">
+        <table id="tokenTable">
+            <thead>
+                <tr>
+                    <th onclick="sortTable(0)">Token</th>
+                    <th onclick="sortTable(1)">Symbol</th>
+                    <th onclick="sortTable(2)">Balance</th>
+                    <th onclick="sortTable(3)">USD Price</th>
+                    <th onclick="sortTable(4)">USD Value</th>
+                    <th onclick="sortTable(5)">24h</th>
+                    <th onclick="sortTable(6)">Liquidity USD</th>
+                    <th onclick="sortTable(7)">Market Cap</th>
+                    <th onclick="sortTable(8)">Volume (24h)</th>
+                    <th onclick="sortTable(9)">Token Address</th>
+                    <th onclick="sortTable(10)">Pair Address</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    async function getTokenUsdData(tokenAddress) {
+        const url = `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`;
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+            const pair = data.pairs[0] || {};
+
+            return {
+                priceUsd: parseFloat(pair.priceUsd || 0),
+                marketCap: pair.marketCap || 'N/A',
+                volume: pair.volume ? pair.volume.h24 : 'N/A',
+                liquidity: pair.liquidity.usd,
+                priceChange: pair.priceChange.h24,
+                pairAddress: pair.pairAddress || 'N/A',
+                url: pair.url || '#'
+            };
+        } catch (error) {
+            console.error("Error fetching USD value:", error);
+            return {
+                priceUsd: 0,
+                marketCap: 'N/A',
+                volume: 'N/A',
+                pairAddress: 'N/A',
+                url: '#'
+            };
+        }
+    }
+
+    async function fetchBalances() {
+        const address = document.getElementById("address").value;
+        const apiKey = document.getElementById("apiKey").value; // Get API key from input
+        const errorDisplay = document.getElementById("errorDisplay");
+        const progressBar = document.getElementById("progressBar");
+        const progressContainer = document.querySelector(".progress");
+        
+        // Clear previous error message
+        errorDisplay.innerText = '';
+
+        if (!apiKey) {
+            errorDisplay.innerText = "Error: API KEY is missing. Please enter your Moralis API Key.";
+            return; // Stop execution if API key is not provided
+        }
+
+        const baseUrl = `https://deep-index.moralis.io/api/v2/${address}/erc20?chain=base`;
+        const headers = { 
+            "accept": "application/json",
+            "X-API-Key": apiKey // Use the user-provided API key
+        };
+        let totalNetWorth = 0;
+
+        // Show progress bar
+        progressContainer.style.display = 'block';
+        progressBar.style.width = '0%';
+
+        
+
+        try {
+            const response = await fetch(baseUrl, { headers });
+            const tokens = await response.json();
+            
+            const tableBody = document.querySelector("#tokenTable tbody");
+            tableBody.innerHTML = ''; // Clear previous entries
+
+            const totalTokens = tokens.length; // Total number of tokens
+            let processedTokens = 0;
+
+            for (const token of tokens) {
+                const usdData = await getTokenUsdData(token.token_address);
+                // Skip tokens with zero liquidity
+                if (usdData.liquidity === 0) continue;
+                const balance = token.balance / Math.pow(10, token.decimals);
+                const balanceUsd = balance * usdData.priceUsd;
+                if (balanceUsd === 0) continue;
+                totalNetWorth += balanceUsd;
+
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                    <td>${token.name || 'N/A'}</td>
+                    <td>${token.symbol}</td>
+                    <td>${formatNumber(balance)}</td>
+                    <td>$${usdData.priceUsd.toFixed(5)}</td>
+                    <td class="usdValue">$${formatNumber(balanceUsd)}</td>
+                    <td>${usdData.priceChange || 'N/A'}%</td>
+                    <td>$${formatNumber(usdData.liquidity) || 'N/A'}</td>
+                    <td>$${formatNumber(usdData.marketCap) || 'N/A'}</td>
+                    <td>$${formatNumber(usdData.volume) || 'N/A'}</td>
+                    <td>${token.token_address}</td>
+                    <td><a href="${usdData.url}" target="_blank">${usdData.pairAddress}</a></td>
+                `;
+                tableBody.appendChild(row);
+
+                processedTokens++;
+                // Update progress bar
+                progressBar.style.width = `${(processedTokens / totalTokens) * 100}%`;
+            }
+
+            // Display total net worth
+            document.getElementById("netWorthDisplay").innerText = `Total Net Worth: $${formatNumber(totalNetWorth)}`;
+        } catch (error) {
+            console.error("Error fetching token balances:", error);
+        } finally {
+            // Hide progress bar after fetching is done
+            progressContainer.style.display = 'none';
+            progressBar.style.width = '0%'; // Reset progress bar
+        }
+    }
+
+    function formatNumber(value) {
+        if (value >= 1_000_000) {
+            return (value / 1_000_000).toFixed(1) + "M";
+        } else if (value >= 1_000) {
+            return (value / 1_000).toFixed(1) + "k";
+        } else {
+            return value.toFixed(3);
+        }
+    }
+
+    function sortTable(columnIndex) {
+        const table = document.getElementById("tokenTable");
+        const rows = Array.from(table.rows).slice(1); // Get all rows except the header
+        const isNumericColumn = rows.every(row => !isNaN(parseFormattedNumber(row.cells[columnIndex].innerText)));
+        let sortedRows;
+
+        if (table.dataset.sortOrder === "asc") {
+            sortedRows = rows.sort((a, b) => {
+                const aText = a.cells[columnIndex].innerText.trim();
+                const bText = b.cells[columnIndex].innerText.trim();
+
+                if (isNumericColumn) {
+                    return parseFormattedNumber(aText) - parseFormattedNumber(bText);
+                } else {
+                    return aText.localeCompare(bText);
+                }
+            });
+            table.dataset.sortOrder = "desc";
+        } else {
+            sortedRows = rows.sort((a, b) => {
+                const aText = a.cells[columnIndex].innerText.trim();
+                const bText = b.cells[columnIndex].innerText.trim();
+
+                if (isNumericColumn) {
+                    return parseFormattedNumber(bText) - parseFormattedNumber(aText);
+                } else {
+                    return bText.localeCompare(aText);
+                }
+            });
+            table.dataset.sortOrder = "asc";
+        }
+
+        sortedRows.forEach(row => table.querySelector("tbody").appendChild(row));
+    }
+
+    // Helper function to parse numbers with suffixes
+    function parseFormattedNumber(value) {
+        const number = parseFloat(value.replace(/[^\d.-]/g, ""));
+        if (value.includes("M")) return number * 1_000_000;
+        if (value.includes("k")) return number * 1_000;
+        return number;
+    }
+</script>
+
+</body>
+</html>
