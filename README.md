@@ -1,4 +1,4 @@
-# token_blance_usd_value_by_address
+# token_balance_usd_value_by_address
 # ERC20 Token Balance and USD Value Tracker
 
 This web application allows users to fetch and display the balances of all ERC20 tokens held by a specific wallet address, along with their USD values, using the Moralis API and DexScreener API.
@@ -21,7 +21,7 @@ This web application allows users to fetch and display the balances of all ERC20
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/0xbhagi/token_blance_usd_value_by_address.git
+git clone https://github.com/0xbhagi/token_balance_usd_value_by_address.git
 cd token_blance_usd_value_by_address
 ```
 
